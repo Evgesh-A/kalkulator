@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Строительный калькулятор</title>
+  <title>Калькулятор строительства</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
     body { padding: 20px; background: #f9f9f9; color: #333; }
@@ -61,13 +61,13 @@
       color: #666;
       line-height: 1.5;
     }
+    #pdfTable { display: none; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Строительный калькулятор</h1>
-    <h2>Бесплатная программа для расчёта строительных работ
-С её помощью вы самостоятельно составите смету</h2>
+    <h1>Калькулятор строительства</h1>
+    <h2>С автоматическим выбором единиц измерения</h2>
 
     <table id="costTable">
       <thead>
@@ -104,33 +104,44 @@
     </div>
   </div>
 
+  <!-- Скрытая таблица для PDF -->
+  <div id="pdfTable" style="font-family: Arial; padding: 20px; width: 800px;">
+    <h2 style="text-align: center;">Калькулятор строительства</h2>
+    <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+      <thead>
+        <tr>
+          <th style="border: 1px solid #000; padding: 8px;">Категория</th>
+          <th style="border: 1px solid #000; padding: 8px;">Позиция</th>
+          <th style="border: 1px solid #000; padding: 8px;">Кол-во</th>
+          <th style="border: 1px solid #000; padding: 8px;">Цена</th>
+          <th style="border: 1px solid #000; padding: 8px;">Ед. изм.</th>
+          <th style="border: 1px solid #000; padding: 8px;">Стоимость</th>
+        </tr>
+      </thead>
+      <tbody id="pdfTableBody"></tbody>
+      <tfoot>
+        <tr>
+          <td colspan="5" style="border: 1px solid #000; padding: 8px; text-align: right; font-weight: bold;">ИТОГО:</td>
+          <td id="pdfTotal" style="border: 1px solid #000; padding: 8px; font-weight: bold;"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
   <!-- Библиотеки -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
   <script>
     const { jsPDF } = window.jspdf;
 
     const items = {
-      "Фундамент": [
-        { name: "Бетон", unit: "м³" },
-        { name: "Арматура", unit: "т" }
-      ],
-      "Стены": [
-        { name: "Газобетон", unit: "м³" },
-        { name: "Кирпич", unit: "шт." }
-      ],
-      "Крыша": [
-        { name: "Металлочерепица", unit: "м²" },
-        { name: "Стропила", unit: "м.п." }
-      ],
-      "Полы": [
-        { name: "Стяжка", unit: "м³" },
-        { name: "Ламинат", unit: "м²" }
-      ]
+      "Фундамент": [{ name: "Бетон", unit: "м³" }, { name: "Арматура", unit: "т" }],
+      "Стены": [{ name: "Газобетон", unit: "м³" }, { name: "Кирпич", unit: "шт." }],
+      "Крыша": [{ name: "Металлочерепица", unit: "м²" }, { name: "Стропила", unit: "м.п." }],
+      "Полы": [{ name: "Стяжка", unit: "м³" }, { name: "Ламинат", unit: "м²" }]
     };
-
     const categories = Object.keys(items);
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -138,7 +149,7 @@
       if (saved) {
         JSON.parse(saved).forEach(item => addRow(item));
       } else {
-        addRow(); // первая пустая, но рабочая строка
+        addRow();
       }
       recalc();
     });
@@ -167,12 +178,10 @@
     function addRow(data = null) {
       const tbody = document.getElementById('tableBody');
       const row = tbody.insertRow();
-
       const category = data?.category || '';
       const description = data?.description || '';
       const qty = data?.qty || '';
       const price = data?.price || '';
-
       let unit = '';
       if (category && description) {
         const item = items[category]?.find(i => i.name === description);
@@ -189,15 +198,12 @@
         <td class="actions"><button onclick="removeRow(this)">Удалить</button></td>
       `;
 
-      // Назначаем обработчики ПОСЛЕ вставки в DOM
       const catSelect = row.cells[0].querySelector('select');
       const posSelect = row.cells[1].querySelector('select');
 
-      // Обновление позиций при смене категории
       catSelect.onchange = () => {
         const newCat = catSelect.value;
         row.cells[1].innerHTML = createPositionSelect(newCat);
-        // Переназначаем обработчик для нового селекта
         const newPosSelect = row.cells[1].querySelector('select');
         newPosSelect.onchange = () => {
           const unitVal = newPosSelect.selectedOptions[0]?.dataset.unit || '';
@@ -210,7 +216,6 @@
         saveData();
       };
 
-      // Обновление единицы измерения при смене позиции
       posSelect.onchange = () => {
         const unitVal = posSelect.selectedOptions[0]?.dataset.unit || '';
         row.cells[4].textContent = unitVal;
@@ -252,31 +257,53 @@
       localStorage.setItem('kalkulatorData', JSON.stringify(rows));
     }
 
-    // Экспорт
-    function exportToPDF() {
-      const doc = new jsPDF();
-      doc.setFontSize(16);
-      doc.text('Калькулятор строительства', 14, 20);
-      const tableData = [];
+    // ✅ ЭКСПОРТ В PDF ЧЕРЕЗ html2canvas (кириллица работает!)
+    async function exportToPDF() {
+      // Заполняем скрытую таблицу
+      const pdfBody = document.getElementById('pdfTableBody');
+      pdfBody.innerHTML = '';
       document.querySelectorAll('#tableBody tr').forEach(row => {
         const cat = row.cells[0].querySelector('select')?.value || '';
         const desc = row.cells[1].querySelector('select')?.value || '';
-        const qty = parseFloat(row.cells[2].querySelector('input')?.value) || '';
-        const price = parseFloat(row.cells[3].querySelector('input')?.value) || '';
+        const qty = row.cells[2].querySelector('input')?.value || '';
+        const price = row.cells[3].querySelector('input')?.value || '';
         const unit = row.cells[4].textContent;
-        const value = parseFloat(row.cells[5].textContent) || 0;
-        tableData.push([cat, desc, qty, price, unit, value]);
+        const value = row.cells[5].textContent;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td style="border: 1px solid #000; padding: 6px;">${cat}</td>
+          <td style="border: 1px solid #000; padding: 6px;">${desc}</td>
+          <td style="border: 1px solid #000; padding: 6px;">${qty}</td>
+          <td style="border: 1px solid #000; padding: 6px;">${price}</td>
+          <td style="border: 1px solid #000; padding: 6px;">${unit}</td>
+          <td style="border: 1px solid #000; padding: 6px;">${value}</td>
+        `;
+        pdfBody.appendChild(tr);
       });
-      doc.autoTable({
-        startY: 30,
-        head: [['Категория', 'Позиция', 'Количество', 'Цена за ед.', 'Ед. изм.', 'Стоимость (руб.)']],
-        body: tableData,
-        theme: 'grid',
-        headStyles: { fillColor: [52, 152, 219] }
-      });
-      const finalY = doc.lastAutoTable.finalY + 10;
-      doc.text(`Итого: ${document.getElementById('total').textContent}`, 14, finalY);
-      doc.save('смета.pdf');
+      document.getElementById('pdfTotal').textContent = document.getElementById('total').textContent;
+
+      const element = document.getElementById('pdfTable');
+      const canvas = await html2canvas(element, { scale: 2 });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 297;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      pdf.save('смета.pdf');
     }
 
     function exportToExcel() {
