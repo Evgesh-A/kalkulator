@@ -98,8 +98,8 @@
     </div>
 
     <div class="footer">
-      <p>Выберите категорию и позицию — единица измерения подставится автоматически.</p>
-      <p><strong>Цену за единицу вы указываете сами</strong>. Стоимость рассчитывается автоматически.</p>
+      <p>Выберите категорию → позицию. Единица измерения заполнится автоматически.</p>
+      <p><strong>Цену указываете вы сами.</strong> Стоимость рассчитывается автоматически.</p>
     </div>
   </div>
 
@@ -111,7 +111,6 @@
   <script>
     const { jsPDF } = window.jspdf;
 
-    // Данные: только категории → позиции → единица измерения
     const items = {
       "Фундамент": [
         { name: "Бетон", unit: "м³" },
@@ -133,13 +132,12 @@
 
     const categories = Object.keys(items);
 
-    // Инициализация
     document.addEventListener('DOMContentLoaded', () => {
       const saved = localStorage.getItem('kalkulatorData');
       if (saved) {
         JSON.parse(saved).forEach(item => addRow(item));
       } else {
-        addRow(); // пустая строка по умолчанию
+        addRow(); // первая пустая, но рабочая строка
       }
       recalc();
     });
@@ -155,7 +153,7 @@
 
     function createPositionSelect(category, selectedName = '') {
       if (!category || !items[category]) {
-        return '<select disabled><option>— Сначала выберите категорию —</option></select>';
+        return '<select><option value="">— Сначала выберите категорию —</option></select>';
       }
       let html = '<select><option value="">— Позиция —</option>';
       items[category].forEach(item => {
@@ -190,38 +188,34 @@
         <td class="actions"><button onclick="removeRow(this)">Удалить</button></td>
       `;
 
+      // Назначаем обработчики ПОСЛЕ вставки в DOM
       const catSelect = row.cells[0].querySelector('select');
       const posSelect = row.cells[1].querySelector('select');
 
+      // Обновление позиций при смене категории
       catSelect.onchange = () => {
         const newCat = catSelect.value;
         row.cells[1].innerHTML = createPositionSelect(newCat);
-        const newSelect = row.cells[1].querySelector('select');
-        if (newSelect) {
-          newSelect.onchange = () => {
-            const unitVal = newSelect.selectedOptions[0]?.dataset.unit || '';
-            row.cells[4].textContent = unitVal;
-            recalc();
-            saveData();
-          };
-        }
+        // Переназначаем обработчик для нового селекта
+        const newPosSelect = row.cells[1].querySelector('select');
+        newPosSelect.onchange = () => {
+          const unitVal = newPosSelect.selectedOptions[0]?.dataset.unit || '';
+          row.cells[4].textContent = unitVal;
+          recalc();
+          saveData();
+        };
         row.cells[4].textContent = '';
         recalc();
         saveData();
       };
 
-      if (posSelect && !posSelect.disabled) {
-        posSelect.onchange = () => {
-          const unitVal = posSelect.selectedOptions[0]?.dataset.unit || '';
-          row.cells[4].textContent = unitVal;
-          recalc();
-          saveData();
-        };
-        // Инициализация при восстановлении
-        if (unit) {
-          row.cells[4].textContent = unit;
-        }
-      }
+      // Обновление единицы измерения при смене позиции
+      posSelect.onchange = () => {
+        const unitVal = posSelect.selectedOptions[0]?.dataset.unit || '';
+        row.cells[4].textContent = unitVal;
+        recalc();
+        saveData();
+      };
 
       recalc();
       saveData();
@@ -257,7 +251,7 @@
       localStorage.setItem('kalkulatorData', JSON.stringify(rows));
     }
 
-    // Экспорт в PDF
+    // Экспорт
     function exportToPDF() {
       const doc = new jsPDF();
       doc.setFontSize(16);
@@ -280,12 +274,10 @@
         headStyles: { fillColor: [52, 152, 219] }
       });
       const finalY = doc.lastAutoTable.finalY + 10;
-      doc.setFontSize(14);
       doc.text(`Итого: ${document.getElementById('total').textContent}`, 14, finalY);
       doc.save('смета.pdf');
     }
 
-    // Экспорт в Excel
     function exportToExcel() {
       const ws_data = [
         ['Категория', 'Позиция', 'Количество', 'Цена за единицу (руб.)', 'Единица измерения', 'Стоимость (руб.)']
