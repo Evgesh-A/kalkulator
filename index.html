@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Калькулятор строительства (м³)</title>
+  <title>Калькулятор строительства (списки)</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, sans-serif; }
     body { padding: 20px; background: #f9f9f9; color: #333; }
@@ -13,7 +13,7 @@
     table { width: 100%; border-collapse: collapse; margin: 15px 0; }
     th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
     th { background-color: #f1f1f1; }
-    input { width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+    select, input { width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
     input[type="number"] { text-align: right; }
     .readonly {
       background-color: #f0f0f0;
@@ -82,9 +82,8 @@
 </head>
 <body>
   <div class="container">
-    <h1>Калькулятор стоимости строительства</h1>
-    <h2>Только по объёму в кубических метрах (м³)</h2>
-    <p style="text-align:center; margin-bottom:15px; font-style:italic;">Цена указывается за 1 м³. Объём — в кубометрах.</p>
+    <h1>Калькулятор строительства (м³)</h1>
+    <h2>Выбор из списка категорий и позиций</h2>
 
     <table id="costTable">
       <thead>
@@ -99,7 +98,7 @@
         </tr>
       </thead>
       <tbody id="tableBody">
-        <!-- Примеры будут загружены -->
+        <!-- Строки будут добавляться -->
       </tbody>
       <tfoot>
         <tr class="total-row">
@@ -117,9 +116,8 @@
     </div>
 
     <div class="footer-text">
-      <p>Все позиции рассчитываются только в <strong>кубических метрах (м³)</strong>. Цена указывается за 1 м³. Стоимость = объём × цена за м³.</p>
-      <p>Поле «Ед. изм.» заблокировано — всегда равно «м³».</p>
-      <p>Данные хранятся только в вашем браузере. Никакие данные не передаются на сервер.</p>
+      <p>Выберите категорию → автоматически загрузятся доступные позиции. Цена за м³ подставляется автоматически (можно изменить).</p>
+      <p>Все расчёты — только в кубометрах (м³).</p>
     </div>
   </div>
 
@@ -131,12 +129,27 @@
   <script>
     const { jsPDF } = window.jspdf;
 
-    // Примеры — только м³
-    const exampleData = [
-      { category: "Фундамент", description: "Бетон B25", qty: "48.5", price: "5100" },
-      { category: "Перекрытие", description: "Монолитное перекрытие", qty: "92.0", price: "6800" },
-      { category: "Стяжка", description: "Цементно-песчаная стяжка", qty: "35.2", price: "2900" }
-    ];
+    // Данные: категории → позиции с описанием и ценой
+    const positionOptions = {
+      "Фундамент": [
+        { desc: "Бетон B20", price: 4800 },
+        { desc: "Бетон B25", price: 5100 },
+        { desc: "Бетон B30", price: 5400 }
+      ],
+      "Стены": [
+        { desc: "Керамзитобетонные блоки", price: 2900 },
+        { desc: "Газобетон D500", price: 3200 }
+      ],
+      "Перекрытия": [
+        { desc: "Монолитное перекрытие", price: 6800 },
+        { desc: "Ж/б плиты", price: 5900 }
+      ],
+      "Стяжка": [
+        { desc: "Цементно-песчаная стяжка", price: 2900 }
+      ]
+    };
+
+    const categories = Object.keys(positionOptions);
 
     document.addEventListener('DOMContentLoaded', () => {
       const saved = localStorage.getItem('kalkulatorData');
@@ -144,10 +157,33 @@
         const data = JSON.parse(saved);
         data.forEach(item => addRow(item));
       } else {
-        exampleData.forEach(item => addRow(item));
+        // Пример по умолчанию
+        addRow({ category: "Фундамент", description: "Бетон B25", qty: "50", price: "5100" });
       }
       recalc();
     });
+
+    function createCategorySelect(selected = '') {
+      let html = `<select ${selected ? '' : 'disabled'}>`;
+      html += '<option value="">— Выберите —</option>';
+      categories.forEach(cat => {
+        html += `<option value="${cat}" ${cat === selected ? 'selected' : ''}>${cat}</option>`;
+      });
+      html += '</select>';
+      return html;
+    }
+
+    function createPositionSelect(category, selectedDesc = '') {
+      if (!category || !positionOptions[category]) {
+        return '<select disabled><option>— Сначала выберите категорию —</option></select>';
+      }
+      let html = '<select>';
+      positionOptions[category].forEach(opt => {
+        html += `<option value="${opt.desc}" data-price="${opt.price}" ${opt.desc === selectedDesc ? 'selected' : ''}>${opt.desc}</option>`;
+      });
+      html += '</select>';
+      return html;
+    }
 
     function addRow(data = null) {
       const tbody = document.getElementById('tableBody');
@@ -155,17 +191,49 @@
       const category = data?.category || '';
       const description = data?.description || '';
       const qty = data?.qty || '';
-      const price = data?.price || '';
+      const price = data?.price || (description && category ? (positionOptions[category]?.find(p => p.desc === description)?.price || '') : '');
 
       row.innerHTML = `
-        <td data-label="Категория"><input type="text" placeholder="Категория" value="${category}" oninput="saveData()"></td>
-        <td data-label="Описание"><input type="text" placeholder="Поз. / описание" value="${description}" oninput="saveData()"></td>
+        <td data-label="Категория">${createCategorySelect(category)}</td>
+        <td data-label="Позиция">${createPositionSelect(category, description)}</td>
         <td data-label="Объём"><input type="number" min="0" step="0.01" value="${qty}" oninput="recalc()"></td>
         <td data-label="Цена"><input type="number" min="0" step="0.01" value="${price}" oninput="recalc()"></td>
         <td data-label="Ед. изм." class="readonly">м³</td>
         <td data-label="Стоимость" class="value-cell">0.00</td>
         <td data-label="Действия" class="actions"><button onclick="removeRow(this)">Удалить</button></td>
       `;
+
+      // Назначаем обработчики после вставки
+      const catSelect = row.cells[0].querySelector('select');
+      const posSelect = row.cells[1].querySelector('select');
+
+      if (catSelect) {
+        catSelect.onchange = () => {
+          const newCat = catSelect.value;
+          row.cells[1].innerHTML = createPositionSelect(newCat);
+          const newSelect = row.cells[1].querySelector('select');
+          if (newSelect) {
+            newSelect.onchange = () => {
+              const priceVal = newSelect.selectedOptions[0]?.dataset.price || '';
+              row.cells[3].querySelector('input').value = priceVal;
+              recalc();
+              saveData();
+            };
+          }
+          recalc();
+          saveData();
+        };
+      }
+
+      if (posSelect && !posSelect.disabled) {
+        posSelect.onchange = () => {
+          const priceVal = posSelect.selectedOptions[0]?.dataset.price || '';
+          row.cells[3].querySelector('input').value = priceVal;
+          recalc();
+          saveData();
+        };
+      }
+
       recalc();
       saveData();
     }
@@ -191,13 +259,16 @@
     function saveData() {
       const rows = [];
       document.querySelectorAll('#tableBody tr').forEach(row => {
-        const inputs = row.querySelectorAll('input');
+        const catSelect = row.cells[0].querySelector('select');
+        const posSelect = row.cells[1].querySelector('select');
+        const qtyInput = row.cells[2].querySelector('input');
+        const priceInput = row.cells[3].querySelector('input');
+
         rows.push({
-          category: inputs[0]?.value || '',
-          description: inputs[1]?.value || '',
-          qty: inputs[2]?.value || '',
-          price: inputs[3]?.value || ''
-          // единица измерения всегда "м³", не сохраняем
+          category: catSelect?.value || '',
+          description: posSelect?.value || '',
+          qty: qtyInput?.value || '',
+          price: priceInput?.value || ''
         });
       });
       localStorage.setItem('kalkulatorData', JSON.stringify(rows));
@@ -209,20 +280,16 @@
       doc.text('Калькулятор строительства (м³)', 14, 20);
       const tableData = [];
       document.querySelectorAll('#tableBody tr').forEach(row => {
-        const inputs = row.querySelectorAll('input');
+        const cat = row.cells[0].querySelector('select')?.value || '';
+        const desc = row.cells[1].querySelector('select')?.value || '';
+        const qty = parseFloat(row.cells[2].querySelector('input')?.value) || '';
+        const price = parseFloat(row.cells[3].querySelector('input')?.value) || '';
         const value = parseFloat(row.cells[5].textContent) || 0;
-        tableData.push([
-          inputs[0]?.value || '',
-          inputs[1]?.value || '',
-          parseFloat(inputs[2]?.value) || '',
-          parseFloat(inputs[3]?.value) || '',
-          'м³',
-          value
-        ]);
+        tableData.push([cat, desc, qty, price, 'м³', value]);
       });
       doc.autoTable({
         startY: 30,
-        head: [['Категория', 'Описание', 'Объём (м³)', 'Цена за 1 м³ (руб.)', 'Ед. изм.', 'Стоимость (руб.)']],
+        head: [['Категория', 'Позиция', 'Объём (м³)', 'Цена за 1 м³', 'Ед. изм.', 'Стоимость (руб.)']],
         body: tableData,
         theme: 'grid',
         headStyles: { fillColor: [52, 152, 219] }
@@ -230,30 +297,26 @@
       const finalY = doc.lastAutoTable.finalY + 10;
       doc.setFontSize(14);
       doc.text(`Итого: ${document.getElementById('total').textContent}`, 14, finalY);
-      doc.save('смета_м3.pdf');
+      doc.save('смета_списки.pdf');
     }
 
     function exportToExcel() {
       const ws_data = [
-        ['Категория', 'Описание', 'Объём (м³)', 'Цена за 1 м³ (руб.)', 'Единица изм.', 'Стоимость (руб.)']
+        ['Категория', 'Позиция', 'Объём (м³)', 'Цена за 1 м³ (руб.)', 'Единица изм.', 'Стоимость (руб.)']
       ];
       document.querySelectorAll('#tableBody tr').forEach(row => {
-        const inputs = row.querySelectorAll('input');
+        const cat = row.cells[0].querySelector('select')?.value || '';
+        const desc = row.cells[1].querySelector('select')?.value || '';
+        const qty = parseFloat(row.cells[2].querySelector('input')?.value) || '';
+        const price = parseFloat(row.cells[3].querySelector('input')?.value) || '';
         const value = parseFloat(row.cells[5].textContent) || 0;
-        ws_data.push([
-          inputs[0]?.value || '',
-          inputs[1]?.value || '',
-          parseFloat(inputs[2]?.value) || '',
-          parseFloat(inputs[3]?.value) || '',
-          'м³',
-          value
-        ]);
+        ws_data.push([cat, desc, qty, price, 'м³', value]);
       });
       ws_data.push(['', '', '', '', 'ИТОГО:', document.getElementById('total').textContent]);
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.aoa_to_sheet(ws_data);
       XLSX.utils.book_append_sheet(wb, ws, 'Смета (м³)');
-      XLSX.writeFile(wb, 'смета_м3.xlsx');
+      XLSX.writeFile(wb, 'смета_списки.xlsx');
     }
   </script>
 </body>
