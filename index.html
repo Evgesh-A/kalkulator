@@ -3,18 +3,30 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Калькулятор строительства дома</title>
+  <title>Калькулятор строительства (м³)</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, sans-serif; }
     body { padding: 20px; background: #f9f9f9; color: #333; }
     h1 { text-align: center; margin: 10px 0; color: #2c3e50; font-size: 24px; }
     h2 { text-align: center; margin: 5px 0; font-size: 18px; color: #555; }
-    .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    .container { max-width: 1000px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
     table { width: 100%; border-collapse: collapse; margin: 15px 0; }
     th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
     th { background-color: #f1f1f1; }
     input { width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
     input[type="number"] { text-align: right; }
+    .readonly {
+      background-color: #f0f0f0;
+      cursor: not-allowed;
+      pointer-events: none;
+      user-select: none;
+    }
+    .value-cell {
+      background-color: #f9f9f9;
+      font-weight: bold;
+      pointer-events: none;
+      user-select: text;
+    }
     .actions button {
       padding: 6px 10px;
       margin: 2px;
@@ -70,24 +82,24 @@
 </head>
 <body>
   <div class="container">
-    <h1>Калькулятор стоимости строительства дома</h1>
-    <h2>Бесплатная программа для расчёта строительных работ</h2>
-    <p style="text-align:center; margin-bottom:15px; font-style:italic;">С её помощью вы самостоятельно составите смету</p>
+    <h1>Калькулятор стоимости строительства</h1>
+    <h2>Только по объёму в кубических метрах (м³)</h2>
+    <p style="text-align:center; margin-bottom:15px; font-style:italic;">Цена указывается за 1 м³. Объём — в кубометрах.</p>
 
     <table id="costTable">
       <thead>
         <tr>
           <th>Категория</th>
           <th>Поз. / описание</th>
-          <th>Количество</th>
-          <th>Цена за единицу</th>
-          <th>Единица измерения</th>
+          <th>Объём (м³)</th>
+          <th>Цена за 1 м³ (руб.)</th>
+          <th>Ед. изм.</th>
           <th>Стоимость (руб.)</th>
           <th>Действия</th>
         </tr>
       </thead>
       <tbody id="tableBody">
-        <!-- Строки будут добавляться здесь -->
+        <!-- Примеры будут загружены -->
       </tbody>
       <tfoot>
         <tr class="total-row">
@@ -105,9 +117,9 @@
     </div>
 
     <div class="footer-text">
-      <p>Благодаря этому бесплатному онлайн-калькулятору вы можете безвозмездно составить смету строительства дома. Подрядчик может подготовить коммерческое предложение или отчёт по выполненным работам.</p>
-      <p>Приложение работает на ПК и мобильных устройствах. Пользователь выбирает категорию, указывает цену и количество. Программа автоматически формирует смету, которую можно сохранить в PDF или XLSX.</p>
-      <p><strong>Все данные, введённые в калькулятор, остаются исключительно на вашем устройстве.</strong> Приложение не сохраняет, не обрабатывает и не передаёт никакие данные пользователя.</p>
+      <p>Все позиции рассчитываются только в <strong>кубических метрах (м³)</strong>. Цена указывается за 1 м³. Стоимость = объём × цена за м³.</p>
+      <p>Поле «Ед. изм.» заблокировано — всегда равно «м³».</p>
+      <p>Данные хранятся только в вашем браузере. Никакие данные не передаются на сервер.</p>
     </div>
   </div>
 
@@ -118,7 +130,13 @@
 
   <script>
     const { jsPDF } = window.jspdf;
-    let rowId = 0;
+
+    // Примеры — только м³
+    const exampleData = [
+      { category: "Фундамент", description: "Бетон B25", qty: "48.5", price: "5100" },
+      { category: "Перекрытие", description: "Монолитное перекрытие", qty: "92.0", price: "6800" },
+      { category: "Стяжка", description: "Цементно-песчаная стяжка", qty: "35.2", price: "2900" }
+    ];
 
     document.addEventListener('DOMContentLoaded', () => {
       const saved = localStorage.getItem('kalkulatorData');
@@ -126,7 +144,7 @@
         const data = JSON.parse(saved);
         data.forEach(item => addRow(item));
       } else {
-        addRow();
+        exampleData.forEach(item => addRow(item));
       }
       recalc();
     });
@@ -138,15 +156,14 @@
       const description = data?.description || '';
       const qty = data?.qty || '';
       const price = data?.price || '';
-      const unit = data?.unit || '';
 
       row.innerHTML = `
         <td data-label="Категория"><input type="text" placeholder="Категория" value="${category}" oninput="saveData()"></td>
         <td data-label="Описание"><input type="text" placeholder="Поз. / описание" value="${description}" oninput="saveData()"></td>
-        <td data-label="Количество"><input type="number" min="0" step="0.01" value="${qty}" oninput="recalc()"></td>
+        <td data-label="Объём"><input type="number" min="0" step="0.01" value="${qty}" oninput="recalc()"></td>
         <td data-label="Цена"><input type="number" min="0" step="0.01" value="${price}" oninput="recalc()"></td>
-        <td data-label="Ед. изм."><input type="text" placeholder="шт., м²..." value="${unit}" oninput="saveData()"></td>
-        <td data-label="Стоимость" class="value">0.00</td>
+        <td data-label="Ед. изм." class="readonly">м³</td>
+        <td data-label="Стоимость" class="value-cell">0.00</td>
         <td data-label="Действия" class="actions"><button onclick="removeRow(this)">Удалить</button></td>
       `;
       recalc();
@@ -179,8 +196,8 @@
           category: inputs[0]?.value || '',
           description: inputs[1]?.value || '',
           qty: inputs[2]?.value || '',
-          price: inputs[3]?.value || '',
-          unit: inputs[4]?.value || ''
+          price: inputs[3]?.value || ''
+          // единица измерения всегда "м³", не сохраняем
         });
       });
       localStorage.setItem('kalkulatorData', JSON.stringify(rows));
@@ -189,7 +206,7 @@
     function exportToPDF() {
       const doc = new jsPDF();
       doc.setFontSize(16);
-      doc.text('Калькулятор стоимости строительства дома', 14, 20);
+      doc.text('Калькулятор строительства (м³)', 14, 20);
       const tableData = [];
       document.querySelectorAll('#tableBody tr').forEach(row => {
         const inputs = row.querySelectorAll('input');
@@ -199,13 +216,13 @@
           inputs[1]?.value || '',
           parseFloat(inputs[2]?.value) || '',
           parseFloat(inputs[3]?.value) || '',
-          inputs[4]?.value || '',
+          'м³',
           value
         ]);
       });
       doc.autoTable({
         startY: 30,
-        head: [['Категория', 'Описание', 'Кол-во', 'Цена за ед.', 'Ед. изм.', 'Стоимость (руб.)']],
+        head: [['Категория', 'Описание', 'Объём (м³)', 'Цена за 1 м³ (руб.)', 'Ед. изм.', 'Стоимость (руб.)']],
         body: tableData,
         theme: 'grid',
         headStyles: { fillColor: [52, 152, 219] }
@@ -213,12 +230,12 @@
       const finalY = doc.lastAutoTable.finalY + 10;
       doc.setFontSize(14);
       doc.text(`Итого: ${document.getElementById('total').textContent}`, 14, finalY);
-      doc.save('смета_строительство.pdf');
+      doc.save('смета_м3.pdf');
     }
 
     function exportToExcel() {
       const ws_data = [
-        ['Категория', 'Описание', 'Количество', 'Цена за единицу', 'Единица измерения', 'Стоимость (руб.)']
+        ['Категория', 'Описание', 'Объём (м³)', 'Цена за 1 м³ (руб.)', 'Единица изм.', 'Стоимость (руб.)']
       ];
       document.querySelectorAll('#tableBody tr').forEach(row => {
         const inputs = row.querySelectorAll('input');
@@ -228,15 +245,15 @@
           inputs[1]?.value || '',
           parseFloat(inputs[2]?.value) || '',
           parseFloat(inputs[3]?.value) || '',
-          inputs[4]?.value || '',
+          'м³',
           value
         ]);
       });
       ws_data.push(['', '', '', '', 'ИТОГО:', document.getElementById('total').textContent]);
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.aoa_to_sheet(ws_data);
-      XLSX.utils.book_append_sheet(wb, ws, 'Смета');
-      XLSX.writeFile(wb, 'смета_строительство.xlsx');
+      XLSX.utils.book_append_sheet(wb, ws, 'Смета (м³)');
+      XLSX.writeFile(wb, 'смета_м3.xlsx');
     }
   </script>
 </body>
