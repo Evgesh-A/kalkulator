@@ -43,4 +43,201 @@
     .btn-group button:hover { background: #2980b9; }
     .total-row {
       font-weight: bold;
-      background: #f8f9fa
+      background: #f8f9fa;
+    }
+    .footer-text {
+      margin-top: 20px;
+      font-size: 14px;
+      color: #666;
+      line-height: 1.5;
+    }
+    @media (max-width: 768px) {
+      table, thead, tbody, th, td, tr { display: block; }
+      thead tr { position: absolute; top: -9999px; left: -9999px; }
+      tr { border: 1px solid #ccc; margin-bottom: 10px; padding: 10px; }
+      td { text-align: right; padding-left: 50%; position: relative; }
+      td:before {
+        content: attr(data-label);
+        position: absolute;
+        left: 10px;
+        width: 45%;
+        padding-right: 10px;
+        white-space: nowrap;
+        font-weight: bold;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Калькулятор стоимости строительства дома</h1>
+    <h2>Бесплатная программа для расчёта строительных работ</h2>
+    <p style="text-align:center; margin-bottom:15px; font-style:italic;">С её помощью вы самостоятельно составите смету — версия 1.0 в тестовой стадии</p>
+
+    <table id="costTable">
+      <thead>
+        <tr>
+          <th>Категория</th>
+          <th>Поз. / описание</th>
+          <th>Количество</th>
+          <th>Цена за единицу</th>
+          <th>Единица измерения</th>
+          <th>Стоимость (руб.)</th>
+          <th>Действия</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <!-- Строки будут добавляться здесь -->
+      </tbody>
+      <tfoot>
+        <tr class="total-row">
+          <td colspan="5" style="text-align: right;">ИТОГОВАЯ СТОИМОСТЬ:</td>
+          <td id="total">0.00 руб.</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="btn-group">
+      <button onclick="addRow()">➕ Добавить позицию</button>
+      <button onclick="exportToPDF()">📄 Экспорт в PDF</button>
+      <button onclick="exportToExcel()">📊 Экспорт в XLSX</button>
+    </div>
+
+    <div class="footer-text">
+      <p>Благодаря этому бесплатному онлайн-калькулятору вы можете безвозмездно составить смету строительства дома. Подрядчик может подготовить коммерческое предложение или отчёт по выполненным работам.</p>
+      <p>Приложение работает на ПК и мобильных устройствах. Пользователь выбирает категорию, указывает цену и количество. Программа автоматически формирует смету, которую можно сохранить в PDF или XLSX.</p>
+      <p><strong>Все данные, введённые в калькулятор, остаются исключительно на вашем устройстве.</strong> Приложение не сохраняет, не обрабатывает и не передаёт никакие данные пользователя.</p>
+    </div>
+  </div>
+
+  <!-- Библиотеки -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <script>
+    const { jsPDF } = window.jspdf;
+    let rowId = 0;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const saved = localStorage.getItem('kalkulatorData');
+      if (saved) {
+        const data = JSON.parse(saved);
+        data.forEach(item => addRow(item));
+      } else {
+        addRow();
+      }
+      recalc();
+    });
+
+    function addRow(data = null) {
+      const tbody = document.getElementById('tableBody');
+      const row = tbody.insertRow();
+      const category = data?.category || '';
+      const description = data?.description || '';
+      const qty = data?.qty || '';
+      const price = data?.price || '';
+      const unit = data?.unit || '';
+
+      row.innerHTML = `
+        <td data-label="Категория"><input type="text" placeholder="Категория" value="${category}" oninput="saveData()"></td>
+        <td data-label="Описание"><input type="text" placeholder="Поз. / описание" value="${description}" oninput="saveData()"></td>
+        <td data-label="Количество"><input type="number" min="0" step="0.01" value="${qty}" oninput="recalc()"></td>
+        <td data-label="Цена"><input type="number" min="0" step="0.01" value="${price}" oninput="recalc()"></td>
+        <td data-label="Ед. изм."><input type="text" placeholder="шт., м²..." value="${unit}" oninput="saveData()"></td>
+        <td data-label="Стоимость" class="value">0.00</td>
+        <td data-label="Действия" class="actions"><button onclick="removeRow(this)">Удалить</button></td>
+      `;
+      recalc();
+      saveData();
+    }
+
+    function removeRow(btn) {
+      btn.closest('tr').remove();
+      recalc();
+      saveData();
+    }
+
+    function recalc() {
+      let total = 0;
+      document.querySelectorAll('#tableBody tr').forEach(row => {
+        const qty = parseFloat(row.cells[2].querySelector('input').value) || 0;
+        const price = parseFloat(row.cells[3].querySelector('input').value) || 0;
+        const value = qty * price;
+        row.cells[5].textContent = value.toFixed(2);
+        total += value;
+      });
+      document.getElementById('total').textContent = total.toFixed(2) + ' руб.';
+    }
+
+    function saveData() {
+      const rows = [];
+      document.querySelectorAll('#tableBody tr').forEach(row => {
+        const inputs = row.querySelectorAll('input');
+        rows.push({
+          category: inputs[0]?.value || '',
+          description: inputs[1]?.value || '',
+          qty: inputs[2]?.value || '',
+          price: inputs[3]?.value || '',
+          unit: inputs[4]?.value || ''
+        });
+      });
+      localStorage.setItem('kalkulatorData', JSON.stringify(rows));
+    }
+
+    function exportToPDF() {
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text('Калькулятор стоимости строительства дома', 14, 20);
+      const tableData = [];
+      document.querySelectorAll('#tableBody tr').forEach(row => {
+        const inputs = row.querySelectorAll('input');
+        const value = parseFloat(row.cells[5].textContent) || 0;
+        tableData.push([
+          inputs[0]?.value || '',
+          inputs[1]?.value || '',
+          parseFloat(inputs[2]?.value) || '',
+          parseFloat(inputs[3]?.value) || '',
+          inputs[4]?.value || '',
+          value
+        ]);
+      });
+      doc.autoTable({
+        startY: 30,
+        head: [['Категория', 'Описание', 'Кол-во', 'Цена за ед.', 'Ед. изм.', 'Стоимость (руб.)']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [52, 152, 219] }
+      });
+      const finalY = doc.lastAutoTable.finalY + 10;
+      doc.setFontSize(14);
+      doc.text(`Итого: ${document.getElementById('total').textContent}`, 14, finalY);
+      doc.save('смета_строительство.pdf');
+    }
+
+    function exportToExcel() {
+      const ws_data = [
+        ['Категория', 'Описание', 'Количество', 'Цена за единицу', 'Единица измерения', 'Стоимость (руб.)']
+      ];
+      document.querySelectorAll('#tableBody tr').forEach(row => {
+        const inputs = row.querySelectorAll('input');
+        const value = parseFloat(row.cells[5].textContent) || 0;
+        ws_data.push([
+          inputs[0]?.value || '',
+          inputs[1]?.value || '',
+          parseFloat(inputs[2]?.value) || '',
+          parseFloat(inputs[3]?.value) || '',
+          inputs[4]?.value || '',
+          value
+        ]);
+      });
+      ws_data.push(['', '', '', '', 'ИТОГО:', document.getElementById('total').textContent]);
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      XLSX.utils.book_append_sheet(wb, ws, 'Смета');
+      XLSX.writeFile(wb, 'смета_строительство.xlsx');
+    }
+  </script>
+</body>
+</html>
