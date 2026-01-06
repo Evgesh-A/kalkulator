@@ -259,53 +259,68 @@
 
     // ✅ ЭКСПОРТ В PDF ЧЕРЕЗ html2canvas (кириллица работает!)
     async function exportToPDF() {
-      // Заполняем скрытую таблицу
-      const pdfBody = document.getElementById('pdfTableBody');
-      pdfBody.innerHTML = '';
-      document.querySelectorAll('#tableBody tr').forEach(row => {
-        const cat = row.cells[0].querySelector('select')?.value || '';
-        const desc = row.cells[1].querySelector('select')?.value || '';
-        const qty = row.cells[2].querySelector('input')?.value || '';
-        const price = row.cells[3].querySelector('input')?.value || '';
-        const unit = row.cells[4].textContent;
-        const value = row.cells[5].textContent;
+  try {
+    const pdfTable = document.getElementById('pdfTable');
+    const originalDisplay = pdfTable.style.display;
 
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td style="border: 1px solid #000; padding: 6px;">${cat}</td>
-          <td style="border: 1px solid #000; padding: 6px;">${desc}</td>
-          <td style="border: 1px solid #000; padding: 6px;">${qty}</td>
-          <td style="border: 1px solid #000; padding: 6px;">${price}</td>
-          <td style="border: 1px solid #000; padding: 6px;">${unit}</td>
-          <td style="border: 1px solid #000; padding: 6px;">${value}</td>
-        `;
-        pdfBody.appendChild(tr);
-      });
-      document.getElementById('pdfTotal').textContent = document.getElementById('total').textContent;
+    // Временно отображаем элемент
+    pdfTable.style.display = 'block';
+    pdfTable.style.visibility = 'hidden'; // чтобы не моргало
+    pdfTable.style.position = 'absolute';
+    pdfTable.style.left = '-10000px'; // убираем за экран
 
-      const element = document.getElementById('pdfTable');
-      const canvas = await html2canvas(element, { scale: 2 });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgWidth = 210; // A4 width in mm
-      const pageHeight = 297;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
+    // Заполняем данные
+    const pdfBody = document.getElementById('pdfTableBody');
+    pdfBody.innerHTML = '';
+    document.querySelectorAll('#tableBody tr').forEach(row => {
+      const cat = row.cells[0].querySelector('select')?.value || '';
+      const desc = row.cells[1].querySelector('select')?.value || '';
+      const qty = row.cells[2].querySelector('input')?.value || '';
+      const price = row.cells[3].querySelector('input')?.value || '';
+      const unit = row.cells[4].textContent;
+      const value = row.cells[5].textContent;
 
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="border:1px solid #000;padding:6px;">${cat}</td>
+        <td style="border:1px solid #000;padding:6px;">${desc}</td>
+        <td style="border:1px solid #000;padding:6px;">${qty}</td>
+        <td style="border:1px solid #000;padding:6px;">${price}</td>
+        <td style="border:1px solid #000;padding:6px;">${unit}</td>
+        <td style="border:1px solid #000;padding:6px;">${value}</td>
+      `;
+      pdfBody.appendChild(tr);
+    });
+    document.getElementById('pdfTotal').textContent = document.getElementById('total').textContent;
 
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
+    // Делаем рендеринг
+    const canvas = await html2canvas(pdfTable, {
+      scale: 1.5,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff'
+    });
 
+    // Восстанавливаем скрытие
+    pdfTable.style.display = originalDisplay;
+
+    // Создаём PDF
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const imgWidth = 210; // A4 width
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    if (imgHeight > 0) {
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
       pdf.save('смета.pdf');
+    } else {
+      throw new Error('Изображение имеет нулевую высоту');
     }
-
+  } catch (error) {
+    console.error('Ошибка при экспорте PDF:', error);
+    alert('Ошибка при создании PDF. Проверьте консоль (F12).');
+  }
+}
     function exportToExcel() {
       const ws_data = [
         ['Категория', 'Позиция', 'Количество', 'Цена за единицу (руб.)', 'Единица измерения', 'Стоимость (руб.)']
